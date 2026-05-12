@@ -1,0 +1,16 @@
+{
+  "inningMinutes": 20,
+  "roomId": "indians-practice",
+  "actions": [
+    { "label": "IF Hit",      "section": "offense", "offense": 1,   "defense": 0,  "outs": 0 },
+    { "label": "OF Hit",      "section": "offense", "offense": 1.5, "defense": 0,  "outs": 0 },
+    { "label": "Walk",        "section": "offense", "offense": 0.5, "defense": 0,  "outs": 0 },
+    { "label": "Run Scored",  "section": "offense", "offense": 2,   "defense": 0,  "outs": 0 },
+    { "label": "K Swinging",  "section": "both",    "offense": -1,  "defense": 2,  "outs": 1 },
+    { "label": "K Looking",   "section": "both",    "offense": -2,  "defense": 3,  "outs": 1 },
+    { "label": "Out",         "section": "defense", "offense": 0,   "defense": 1,  "outs": 1 },
+    { "label": "Missed Play", "section": "defense", "offense": 0,   "defense": -1, "outs": 0 },
+    { "label": "Wrong Base",  "section": "defense", "offense": 0,   "defense": -2, "outs": 0 },
+    { "label": "3 Up 3 Down", "section": "defense", "offense": 0,   "defense": 3,  "outs": 0 }
+  ]
+}
