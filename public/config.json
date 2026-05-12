@@ -1,6 +1,7 @@
 {
   "inningMinutes": 20,
-  "roomId": "indians-practice",
+  "partyHost": "mini-game-scorer.jsegars.partykit.dev",
+  "roomId": "practice",
   "actions": [
     { "label": "IF Hit",      "section": "offense", "offense": 1,   "defense": 0,  "outs": 0 },
     { "label": "OF Hit",      "section": "offense", "offense": 1.5, "defense": 0,  "outs": 0 },

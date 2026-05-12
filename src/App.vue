@@ -258,10 +258,10 @@ function handleNewInning() {
 let socket = null
 
 function initParty() {
-  if (!config.value?.roomId) return
+  if (!config.value?.partyHost || !config.value?.roomId) return
   try {
     socket = new PartySocket({
-      host: `${config.value.roomId}.partykit.dev`,
+      host: config.value.partyHost,
       room: config.value.roomId,
     })
     socket.onmessage = (e) => {
