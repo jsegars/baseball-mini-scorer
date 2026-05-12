@@ -17,11 +17,71 @@ async function loadConfig() {
 const offenseScore = ref(0)
 const defenseScore = ref(0)
 const outs = ref(0)
-const secondsLeft = ref(0)
-const inningDuration = ref(0)
-const timerRunning = ref(false)
-const lastAction = ref(null) // { offense, defense, outs } for single undo
+const inningDuration = ref(0) // seconds
+const timerStartedAt = ref(null) // ms timestamp of last start, null when paused
+const accumulatedMs = ref(0) // ms elapsed across all previous run segments
+const lastAction = ref(null)
 const outsFlashing = ref(false)
+
+// Tick ref forces secondsLeft to recompute every interval cycle
+const tick = ref(0)
+let timerInterval = null
+
+const timerRunning = computed(() => timerStartedAt.value !== null)
+
+const secondsLeft = computed(() => {
+  tick.value // reactive dependency
+  let elapsed = accumulatedMs.value
+  if (timerStartedAt.value) elapsed += Date.now() - timerStartedAt.value
+  return Math.max(0, inningDuration.value - Math.floor(elapsed / 1000))
+})
+
+const timerWarning = computed(() => secondsLeft.value > 0 && secondsLeft.value <= 120)
+const timerExpired = computed(() => secondsLeft.value === 0)
+
+const formattedTime = computed(() => {
+  const m = Math.floor(secondsLeft.value / 60)
+  const s = secondsLeft.value % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+})
+
+function startInterval() {
+  clearInterval(timerInterval)
+  timerInterval = setInterval(() => {
+    tick.value++
+    if (secondsLeft.value <= 0) pauseTimer()
+  }, 500)
+}
+
+function startTimer() {
+  if (timerRunning.value || secondsLeft.value <= 0) return
+  timerStartedAt.value = Date.now()
+  startInterval()
+  broadcast()
+}
+
+function pauseTimer() {
+  if (!timerRunning.value) return
+  accumulatedMs.value += Date.now() - timerStartedAt.value
+  timerStartedAt.value = null
+  clearInterval(timerInterval)
+  timerInterval = null
+  broadcast()
+}
+
+function toggleTimer() {
+  timerRunning.value ? pauseTimer() : startTimer()
+}
+
+function resetTimer() {
+  if (timerRunning.value) {
+    clearInterval(timerInterval)
+    timerInterval = null
+  }
+  timerStartedAt.value = null
+  accumulatedMs.value = 0
+  broadcast()
+}
 
 function resetToConfig() {
   if (!config.value) return
@@ -29,8 +89,10 @@ function resetToConfig() {
   defenseScore.value = 0
   outs.value = 0
   inningDuration.value = config.value.inningMinutes * 60
-  secondsLeft.value = inningDuration.value
-  timerRunning.value = false
+  timerStartedAt.value = null
+  accumulatedMs.value = 0
+  clearInterval(timerInterval)
+  timerInterval = null
   lastAction.value = null
 }
 
@@ -42,8 +104,9 @@ function saveState() {
     offenseScore: offenseScore.value,
     defenseScore: defenseScore.value,
     outs: outs.value,
-    secondsLeft: secondsLeft.value,
     inningDuration: inningDuration.value,
+    timerStartedAt: timerStartedAt.value,
+    accumulatedMs: accumulatedMs.value,
   }))
 }
 
@@ -55,9 +118,10 @@ function loadState() {
     offenseScore.value = s.offenseScore ?? 0
     defenseScore.value = s.defenseScore ?? 0
     outs.value = s.outs ?? 0
-    secondsLeft.value = s.secondsLeft ?? 0
     inningDuration.value = s.inningDuration ?? (config.value?.inningMinutes * 60 ?? 1200)
-    timerRunning.value = false
+    timerStartedAt.value = s.timerStartedAt ?? null
+    accumulatedMs.value = s.accumulatedMs ?? 0
+    if (timerStartedAt.value) startInterval()
     return true
   } catch {
     return false
@@ -68,46 +132,7 @@ function clearState() {
   localStorage.removeItem(STORAGE_KEY)
 }
 
-watch([offenseScore, defenseScore, outs, secondsLeft, inningDuration], saveState)
-
-// ── Timer ────────────────────────────────────────────────────────────────────
-let timerInterval = null
-
-function startTimer() {
-  if (timerRunning.value || secondsLeft.value <= 0) return
-  timerRunning.value = true
-  timerInterval = setInterval(() => {
-    if (secondsLeft.value > 0) {
-      secondsLeft.value--
-    } else {
-      pauseTimer()
-    }
-  }, 1000)
-}
-
-function pauseTimer() {
-  timerRunning.value = false
-  clearInterval(timerInterval)
-  timerInterval = null
-}
-
-function toggleTimer() {
-  timerRunning.value ? pauseTimer() : startTimer()
-}
-
-function resetTimer() {
-  pauseTimer()
-  secondsLeft.value = inningDuration.value
-}
-
-const formattedTime = computed(() => {
-  const m = Math.floor(secondsLeft.value / 60)
-  const s = secondsLeft.value % 60
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-})
-
-const timerWarning = computed(() => secondsLeft.value > 0 && secondsLeft.value <= 120)
-const timerExpired = computed(() => secondsLeft.value === 0)
+watch([offenseScore, defenseScore, outs, inningDuration, timerStartedAt, accumulatedMs], saveState)
 
 // ── Timer duration override ──────────────────────────────────────────────────
 const showTimerEdit = ref(false)
@@ -122,8 +147,10 @@ function openTimerEdit() {
 function applyTimerEdit() {
   const mins = Math.max(1, Math.min(99, parseInt(timerEditMinutes.value) || 1))
   inningDuration.value = mins * 60
-  secondsLeft.value = mins * 60
+  timerStartedAt.value = null
+  accumulatedMs.value = 0
   showTimerEdit.value = false
+  broadcast()
 }
 
 // ── Score format ─────────────────────────────────────────────────────────────
@@ -233,7 +260,7 @@ function dismissConfirm() {
 // ── Reset timer ───────────────────────────────────────────────────────────────
 function handleResetTimer() {
   if (timerRunning.value) {
-    showConfirm('Reset the timer?', resetTimer)
+    showConfirm('Reset the timer?', () => { resetTimer() })
   } else {
     resetTimer()
   }
@@ -242,7 +269,6 @@ function handleResetTimer() {
 // ── New Inning ────────────────────────────────────────────────────────────────
 function handleNewInning() {
   const doIt = () => {
-    pauseTimer()
     resetToConfig()
     clearState()
     broadcast()
@@ -270,8 +296,15 @@ function initParty() {
         offenseScore.value = state.offenseScore
         defenseScore.value = state.defenseScore
         outs.value = state.outs
-        secondsLeft.value = state.secondsLeft
         inningDuration.value = state.inningDuration
+        accumulatedMs.value = state.accumulatedMs
+        const wasRunning = timerRunning.value
+        timerStartedAt.value = state.timerStartedAt
+        if (timerStartedAt.value && !wasRunning) startInterval()
+        else if (!timerStartedAt.value && wasRunning) {
+          clearInterval(timerInterval)
+          timerInterval = null
+        }
       } catch {}
     }
   } catch {}
@@ -284,8 +317,9 @@ function broadcast() {
       offenseScore: offenseScore.value,
       defenseScore: defenseScore.value,
       outs: outs.value,
-      secondsLeft: secondsLeft.value,
       inningDuration: inningDuration.value,
+      timerStartedAt: timerStartedAt.value,
+      accumulatedMs: accumulatedMs.value,
     }))
   } catch {}
 }
