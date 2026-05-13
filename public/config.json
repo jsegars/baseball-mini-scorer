@@ -1,5 +1,5 @@
 {
-  "inningMinutes": 15,
+  "inningMinutes": 10,
   "partyHost": "mini-game-scorer.jsegars.partykit.dev",
   "roomId": "practice",
   "actions": [
